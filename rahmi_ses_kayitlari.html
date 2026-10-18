@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rahmi • Ses Kayıtları</title>
+<style>
+:root{color-scheme:dark;--bg:#10141c;--panel:#191f2b;--line:#30394a;--text:#eef3fb;--muted:#aab6c8;--accent:#6ed7c2;--danger:#ff8b8b}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#1b2b3b,var(--bg) 55%);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+main{max-width:850px;margin:0 auto;padding:28px 16px 60px}.hero{display:flex;gap:15px;align-items:center;margin-bottom:22px}.robot{width:64px;height:64px;flex:none;border:1px solid #4a687b;border-radius:20px;display:grid;place-items:center;background:#172b38;font-size:32px}.eyebrow{color:var(--accent);font-size:12px;letter-spacing:.13em;text-transform:uppercase;font-weight:700}h1{font-size:clamp(26px,5vw,36px);line-height:1.15;margin:3px 0 5px}.muted{color:var(--muted)}.panel{background:rgba(25,31,43,.94);border:1px solid var(--line);border-radius:18px;padding:20px;margin:15px 0}.panel h2{font-size:19px;margin:0 0 5px}.notice{background:#172b2b;border:1px solid #2c6259;border-radius:12px;padding:12px 14px;color:#d4fff5;font-size:14px;margin:16px 0}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:180px}label{font-size:13px;color:var(--muted)}input,select,button{font:inherit}input[type=text],select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#10151e;color:var(--text)}input[type=file]{width:100%;padding:12px;border:1px dashed #526177;border-radius:12px;background:#111722;color:var(--muted);margin:12px 0}button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:650;background:var(--accent);color:#09221e}button.secondary{background:#30394a;color:var(--text)}button.danger{background:#42272d;color:#ffd5d5}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.empty{text-align:center;padding:28px 12px;color:var(--muted);border:1px dashed var(--line);border-radius:12px}.record{border:1px solid var(--line);border-radius:13px;padding:14px;margin-top:10px;background:#131923}.recordtop{display:flex;justify-content:space-between;gap:10px;align-items:start;flex-wrap:wrap}.record h3{margin:0;font-size:17px}.tag{display:inline-block;color:#bdeee5;background:#1a3b38;border-radius:7px;padding:3px 7px;font-size:12px;margin-top:5px}.record audio{width:100%;margin:12px 0 4px}.small{font-size:13px}.actions{display:flex;gap:8px;flex-wrap:wrap}.footer{font-size:12px;color:var(--muted);text-align:center;margin-top:20px}#status{min-height:22px;color:var(--accent);font-size:14px;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="robot" aria-hidden="true">🤖</div>
+    <div><div class="eyebrow">Polat Robot Projesi</div><h1>Rahmi Ses Kayıtları</h1><div class="muted">Kayıtlarını ekle, dinle ve kelimelerle eşleştir.</div></div>
+  </header>
+  <div class="notice"><strong>Bilgi:</strong> Bu sürüm dosyaları yalnızca bu tarayıcıda, bu bilgisayarda saklar. İnternete yüklemez ve henüz ESP32'ye bağlanmaz.</div>
+  <section class="panel">
+    <h2>Yeni ses kaydı ekle</h2>
+    <p class="muted small">MP3, WAV, OGG veya tarayıcının desteklediği bir ses dosyası seç.</p>
+    <div class="row">
+      <div class="field"><label for="name">Kayıt adı</label><input id="name" type="text" maxlength="80" placeholder="Örn. Efendim"></div>
+      <div class="field"><label for="trigger">Eşleşen kelime / kullanım</label><select id="trigger"><option value="Rahmi">Rahmi</option><option value="Merhaba">Merhaba</option><option value="Dur">Dur</option><option value="Gel">Gel</option><option value="Diğer">Diğer</option></select></div>
+    </div>
+    <input id="file" type="file" accept="audio/*">
+    <div class="row"><button id="add">Kaydı ekle</button><button class="secondary" id="clearForm" type="button">Alanları temizle</button></div>
+    <div id="status" role="status" aria-live="polite"></div>
+  </section>
+  <section class="panel">
+    <div class="row" style="justify-content:space-between"><div><h2>Kayıt listesi</h2><div class="muted small">Eklenen kayıtlar bu sayfayı yeniden açtığında da burada kalır.</div></div><span id="count" class="tag">0 kayıt</span></div>
+    <div id="records"><div class="empty">Henüz kayıt yok. İlk ses dosyanı yukarıdan ekle.</div></div>
+  </section>
+  <div class="footer">Rahmi Ses Kayıtları • Dosyaların bu tarayıcıda saklanır. Tarayıcı verilerini temizlemek kayıtları silebilir.</div>
+</main>
+<script>
+(() => {
+  const DB_NAME = 'RahmiSesKayitlariDB';
+  const STORE = 'records';
+  const $ = id => document.getElementById(id);
+  let db;
+  const status = (message, bad=false) => { $('status').textContent = message; $('status').style.color = bad ? '#ffaaaa' : 'var(--accent)'; };
+  function openDB(){
+    return new Promise((resolve,reject)=>{
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => { const d=request.result; if(!d.objectStoreNames.contains(STORE)){const s=d.createObjectStore(STORE,{keyPath:'id',autoIncrement:true});s.createIndex('createdAt','createdAt');} };
+      request.onsuccess = () => {db=request.result;resolve(db)};
+      request.onerror = () => reject(request.error);
+    });
+  }
+  function transaction(mode='readonly'){ return db.transaction(STORE,mode).objectStore(STORE); }
+  function allRecords(){return new Promise((resolve,reject)=>{const r=transaction().getAll();r.onsuccess=()=>resolve(r.result.sort((a,b)=>b.createdAt-a.createdAt));r.onerror=()=>reject(r.error);});}
+  function addRecord(item){return new Promise((resolve,reject)=>{const r=transaction('readwrite').add(item);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+  function deleteRecord(id){return new Promise((resolve,reject)=>{const r=transaction('readwrite').delete(id);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error);});}
+  function editRecord(item){return new Promise((resolve,reject)=>{const r=transaction('readwrite').put(item);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error);});}
+  function formatSize(bytes){if(bytes<1024)return bytes+' B';if(bytes<1048576)return (bytes/1024).toFixed(1)+' KB';return (bytes/1048576).toFixed(2)+' MB';}
+  async function render(){
+    const records=await allRecords(); $('count').textContent=records.length+' kayıt'; const root=$('records'); root.replaceChildren();
+    if(!records.length){const e=document.createElement('div');e.className='empty';e.textContent='Henüz kayıt yok. İlk ses dosyanı yukarıdan ekle.';root.append(e);return;}
+    records.forEach(item=>{
+      const card=document.createElement('article');card.className='record';
+      const top=document.createElement('div');top.className='recordtop';const left=document.createElement('div');
+      const title=document.createElement('h3');title.textContent=item.name;left.append(title);
+      const tag=document.createElement('span');tag.className='tag';tag.textContent='Kelime: '+item.trigger;left.append(tag);
+      const info=document.createElement('div');info.className='muted small';info.textContent=item.fileName+' • '+formatSize(item.blob.size);left.append(info);top.append(left);
+      const actions=document.createElement('div');actions.className='actions';
+      const rename=document.createElement('button');rename.className='secondary';rename.textContent='Düzenle';rename.addEventListener('click',async()=>{const n=prompt('Kayıt adı:',item.name);if(n===null)return;const clean=n.trim();if(!clean){alert('Kayıt adı boş olamaz.');return;}const t=prompt('Eşleşen kelime (Rahmi, Merhaba, Dur, Gel veya Diğer):',item.trigger);if(t===null)return;item.name=clean;item.trigger=t.trim()||'Diğer';await editRecord(item);await render();});
+      const del=document.createElement('button');del.className='danger';del.textContent='Sil';del.addEventListener('click',async()=>{if(confirm('“'+item.name+'” kaydı silinsin mi?')){await deleteRecord(item.id);await render();status('Kayıt silindi.');}});
+      actions.append(rename,del);top.append(actions);card.append(top);
+      const audio=document.createElement('audio');audio.controls=true;audio.preload='metadata';audio.src=URL.createObjectURL(item.blob);audio.addEventListener('emptied',()=>URL.revokeObjectURL(audio.src),{once:true});card.append(audio);root.append(card);
+    });
+  }
+  $('add').addEventListener('click',async()=>{
+    const file=$('file').files[0];const name=$('name').value.trim();const trigger=$('trigger').value;
+    if(!file){status('Önce bir ses dosyası seç.',true);return;}
+    if(!file.type.startsWith('audio/')){status('Lütfen bir ses dosyası seç.',true);return;}
+    if(!name){status('Lütfen kayıt adına bir isim yaz.',true);$('name').focus();return;}
+    try{await addRecord({name,trigger,fileName:file.name,blob:file,createdAt:Date.now()});$('name').value='';$('file').value='';$('trigger').value='Rahmi';await render();status('Ses kaydı eklendi.');}
+    catch(e){status('Kayıt kaydedilemedi. Tarayıcı depolama alanı dolmuş olabilir.',true);}
+  });
+  $('clearForm').addEventListener('click',()=>{$('name').value='';$('file').value='';$('trigger').value='Rahmi';status('Alanlar temizlendi.');});
+  openDB().then(render).catch(()=>status('Tarayıcı kayıt alanı açılamadı. Güncel Chrome veya Edge ile açmayı dene.',true));
+})();
+</script>
+</body>
+</html>
